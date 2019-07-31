@@ -85,7 +85,7 @@ node04
 11、拷贝hdfs-site.xml文件到conf目录下
 
 ```
-cp /opt/bigdate/hbase-2.6.5/hadoop/etc/hdfs-site/xml /opt/bigdata/hbase-2.0.5/conf
+cp /opt/bigdate/hbase-2.6.5/etc/hadoop/hdfs-site.xml /opt/bigdata/hbase-2.0.5/conf
 ```
 
 12、在任意目录下运行hbase shell的命令，进入hbase的命令行进行相关操作。
