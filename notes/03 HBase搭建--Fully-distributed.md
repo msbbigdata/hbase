@@ -36,7 +36,7 @@ cd hbase-2.0.5/
 6、在/etc/profile文件中配置HBase的环境变量
 
 ```
-export HBASE_HOME=/opt/bigdata/hbsae-2.0.5
+export HBASE_HOME=/opt/bigdata/hbase-2.0.5
 将$HBASE_HOME设置到PATH路径中
 ```
 
