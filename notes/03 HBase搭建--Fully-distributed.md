@@ -16,7 +16,7 @@
 
 ```
 yum install ntpdate
-ntpdata ntp1.aliyun.com
+ntpdate ntp1.aliyun.com
 ```
 
 4、将所有的节点设置免密钥登陆
