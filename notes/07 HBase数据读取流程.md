@@ -24,7 +24,7 @@
 
 ​		和写流程相比，HBase读数据是一个更加复杂的操作流程，这主要基于两个方面的原因：其一是因为整个HBase存储引擎基于LSM-Like树实现，因此一次范围查询可能会涉及多个分片、多块缓存甚至多个数据存储文件；其二是因为HBase中更新操作以及删除操作实现都很简单，更新操作并没有更新原有数据，而是使用时间戳属性实现了多版本。删除操作也并没有真正删除原有数据，只是插入了一条打上”deleted”标签的数据，而真正的数据删除发生在系统异步执行Major_Compact的时候。很显然，这种实现套路大大简化了数据更新、删除流程，但是对于数据读取来说却意味着套上了层层枷锁，读取过程需要根据版本进行过滤，同时对已经标记删除的数据也要进行过滤。
 
-​		客户端如果需要访问数据，每次必须要找到对应的regionserver，从客户端发出请求到找到regionserver这个过程比较简单，不需要做多余的赘述，但是当开始读取数据的时候，大家需要注意了，hbase并没有我们想象的那么简单。
+​		客户端如果需要访问数据，每次必须要找到对应的re·，从客户端发出请求到找到regionserver这个过程比较简单，不需要做多余的赘述，但是当开始读取数据的时候，大家需要注意了，hbase并没有我们想象的那么简单。
 
 ##### 1、构建scanner体系--组件施工队
 
@@ -80,8 +80,11 @@
 
 ![scan案例](https://github.com/msbbigdata/hbase/blob/master/image/scan案例.png)
 
-​		构建Scanner体系是为了更好地执行scan查询，就像组建工匠师团队就是为了盖房子一样。scan查询总是一行一行查询的，先查第一行的所有数据，再查第二行的所有数据，但每一行的查询流程却没有什么本质区别。盖房子也一样，无论是盖8层还是盖18层，都需要一层一层往上盖，而且每一层的盖法并没有什么区别。所以实际上我们只需要关注其中一行数据是如何查询的就可以。
+ 	这三个Scanner组成的heap为<MemstoreScanner，StoreFileScanner2,   StoreFileScanner1>，Scanner由小到大排列。查询的时候首先pop出heap的堆顶元素，即MemstoreScanner，得到keyvalue  = r2:cf1:name:v3:name23的数据，拿到这个keyvalue之后，需要进行如下判定：  
 
-​		对于一行数据的查询，又可以分解为多个列族的查询，比如RowKey=row1的一行数据查询，首先查询列族1上该行的数据集合，再查询列族2里该行的数据集合。同样是盖第一层房子，先盖一单元的一层，再改二单元的一层，盖完之后才算一层盖完，接着开始盖第二层。所以我们也只需要关注某一行某个列族的数据是如何查询的就可以。
+1.  检查该KeyValue的KeyType是否是Deleted/DeletedCol等，如果是就直接忽略该列所有其他版本，跳到下列（列族） 	
+2.  检查该KeyValue的Timestamp是否在用户设定的Timestamp Range范围，如果不在该范围，忽略 	
+3.  检查该KeyValue是否满足用户设置的各种filter过滤器，如果不满足，忽略 	
+4.  检查该KeyValue是否满足用户查询中设定的版本数，比如用户只查询最新版本，则忽略该cell的其他版本；反正如果用户查询所有版本，则还需要查询该cell的其他版本。 
 
-​		还记得Scanner体系构建的最终结果是一个由StoreFileScanner和MemstoreScanner组成的heap（最小堆）么，这里就派上用场了。下图是一张表的逻辑视图，该表有两个列族cf1和cf2（我们只关注cf1），cf1只有一个列name，表中有5行数据，其中每个cell基本都有多个版本。cf1的数据假如实际存储在三个区域，memstore中有r2和r4的最新数据，hfile1中是最早的数据。现在需要查询RowKey=r2的数据，按照上文的理论对应的Scanner指向就如图所示：
+ 现在假设用户查询所有版本而且该keyvalue检查通过，此时当前的堆顶元素需要执行next方法去检索下一个值，并重新组织最小堆。即图中MemstoreScanner将会指向r4，重新组织最小堆之后最小堆将会变为<StoreFileScanner2,  StoreFileScanner1,  MemstoreScanner>，堆顶元素变为StoreFileScanner2，得到keyvalue＝r2:cf1:name:v2:name22，进行一系列判定，再next，再重新组织最小堆… 		
